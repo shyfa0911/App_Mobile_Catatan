@@ -1,372 +1,312 @@
-import React, { useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  SafeAreaView,
-  StatusBar,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import NoteModal from "../components/pageComponent/noteModals";
-import { useAuth } from "../hooks/useAuth";
-import { useNotes } from "../hooks/useNotes";
+import { COLORS, SPACING } from "@/constants/theme";
+import { authService } from "@/services/authService";
+import { notesService } from "@/services/notesService";
+import { Notes } from "@/types/notes";
+import { router } from "expo-router";
+import { useEffect, useState } from "react";
+import { Alert, FlatList, View, useColorScheme } from "react-native";
+import { Card, FAB, IconButton, Searchbar, Text } from "react-native-paper";
 
-export default function App() {
-  const { user, loading: authLoading, login, register, logout } = useAuth();
-  const {
-    notes,
-    loading: notesLoading,
-    addNote,
-    updateNote,
-    deleteNote,
-  } = useNotes();
+export default function HomePage() {
+  const [notes, setNotes] = useState<Notes[]>([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [greeting, setGreeting] = useState("");
 
-  const [isRegister, setIsRegister] = useState(false);
+  // Deteksi tema device
+  const colorScheme = useColorScheme() ?? "light";
+  const colors = COLORS[colorScheme];
 
-  // Form Auth State
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [authLoadingAction, setAuthLoadingAction] = useState(false);
-
-  // State Modal Note
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedNote, setSelectedNote] = useState<any>(null);
-  const [noteTitle, setNoteTitle] = useState("");
-  const [noteContent, setNoteContent] = useState("");
-
-  const handleAuth = async () => {
-    if (!email || !password) {
-      alert("Email dan password wajib diisi!");
-      return;
-    }
-
-    setAuthLoadingAction(true);
-    try {
-      if (isRegister) {
-        await register(email, password);
-        alert("Registrasi sukses! Silakan masuk.");
-        setIsRegister(false);
+  useEffect(() => {
+    const getGreeting = () => {
+      const hour = new Date().getHours();
+      if (hour >= 3 && hour < 11) {
+        return "Selamat Pagi";
+      } else if (hour >= 11 && hour < 15) {
+        return "Selamat Siang";
+      } else if (hour >= 15 && hour < 18) {
+        return "Selamat Sore";
       } else {
-        await login(email, password);
+        return "Selamat Malam";
       }
-    } catch (err: any) {
-      alert(err.message);
+    };
+
+    setGreeting(getGreeting());
+  }, []);
+
+  const fetchNotes = async () => {
+    try {
+      setLoading(true);
+      const session = await authService.getSession();
+
+      if (!session) {
+        router.replace("/LoginScreen" as any);
+        return;
+      }
+
+      const data = await notesService.getNotes(session.user.id);
+      if (data) setNotes(data);
+    } catch (error: any) {
+      Alert.alert("Error", error.message);
     } finally {
-      setAuthLoadingAction(false);
+      setLoading(false);
     }
   };
 
-  const handleOpenCreateModal = () => {
-    setSelectedNote(null);
-    setNoteTitle("");
-    setNoteContent("");
-    setModalVisible(true);
-  };
+  useEffect(() => {
+    fetchNotes();
+  }, []);
 
-  const handleOpenEditModal = (item: any) => {
-    setSelectedNote(item);
-    setNoteTitle(item.title);
-    setNoteContent(item.content);
-    setModalVisible(true);
-  };
+  const filteredNotes = notes.filter(
+    (item) =>
+      item.title.toLowerCase().includes(search.toLowerCase()) ||
+      (item.content &&
+        item.content.toLowerCase().includes(search.toLowerCase())),
+  );
 
-  const handleSaveNote = async () => {
-    if (!noteTitle.trim()) {
-      alert("Judul catatan tidak boleh kosong!");
-      return;
+  const handleDelete = async (id: string) => {
+    try {
+      await notesService.deleteNote(id);
+      setNotes((prev) => prev.filter((item) => item.id !== id));
+    } catch (error: any) {
+      Alert.alert("Gagal Menghapus", error.message);
     }
-
-    if (selectedNote) {
-      await updateNote(selectedNote.id, noteTitle, noteContent);
-    } else {
-      await addNote(noteTitle, noteContent);
-    }
-
-    setModalVisible(false);
   };
 
-  if (authLoading) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center",
-          backgroundColor: "#FAFAFA",
-        }}
-      >
-        <ActivityIndicator size="large" color="#09090B" />
-      </View>
+  // Fungsi ketika ikon menu / settings ditekan
+  const handleOpenSettings = () => {
+    Alert.alert(
+      "Pengaturan",
+      "Menu pengaturan atau sidebar akan segera dibuka.",
+      [{ text: "OK" }],
     );
-  }
-
-  if (!user) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: "#FAFAFA" }}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FAFAFA" />
-        <View
-          style={{ flex: 1, justifyContent: "center", paddingHorizontal: 24 }}
-        >
-          <View style={{ marginBottom: 28 }}>
-            <Text
-              style={{
-                fontSize: 28,
-                fontWeight: "600",
-                color: "#09090B",
-                letterSpacing: -0.5,
-                marginBottom: 6,
-              }}
-            >
-              {isRegister ? "Buat Akun Baru" : "Masuk ke Aplikasi"}
-            </Text>
-            <Text style={{ fontSize: 14, color: "#71717A" }}>
-              {isRegister
-                ? "Daftar untuk mulai mencatat aktivitas Anda."
-                : "Kelola catatan harian Anda dengan mudah."}
-            </Text>
-          </View>
-
-          <View style={{ marginBottom: 16 }}>
-            <Text
-              style={{
-                fontSize: 13,
-                fontWeight: "500",
-                color: "#09090B",
-                marginBottom: 6,
-              }}
-            >
-              Email
-            </Text>
-            <TextInput
-              style={{
-                backgroundColor: "#FFFFFF",
-                borderWidth: 1,
-                borderColor: "#E4E4E7",
-                borderRadius: 8,
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                fontSize: 14,
-                color: "#09090B",
-              }}
-              placeholder="nama@domain.com"
-              placeholderTextColor="#A1A1AA"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={{ marginBottom: 24 }}>
-            <Text
-              style={{
-                fontSize: 13,
-                fontWeight: "500",
-                color: "#09090B",
-                marginBottom: 6,
-              }}
-            >
-              Password
-            </Text>
-            <TextInput
-              style={{
-                backgroundColor: "#FFFFFF",
-                borderWidth: 1,
-                borderColor: "#E4E4E7",
-                borderRadius: 8,
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                fontSize: 14,
-                color: "#09090B",
-              }}
-              placeholder="••••••••"
-              placeholderTextColor="#A1A1AA"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          </View>
-
-          <TouchableOpacity
-            style={{
-              backgroundColor: "#09090B",
-              borderRadius: 8,
-              paddingVertical: 14,
-              alignItems: "center",
-            }}
-            onPress={handleAuth}
-            disabled={authLoadingAction}
-          >
-            {authLoadingAction ? (
-              <ActivityIndicator color="#FAFAFA" size="small" />
-            ) : (
-              <Text
-                style={{ color: "#FAFAFA", fontSize: 14, fontWeight: "500" }}
-              >
-                {isRegister ? "Daftar" : "Masuk"}
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={{ marginTop: 20, alignItems: "center" }}
-            onPress={() => setIsRegister(!isRegister)}
-          >
-            <Text style={{ color: "#71717A", fontSize: 13 }}>
-              {isRegister ? "Sudah punya akun? " : "Belum punya akun? "}
-              <Text style={{ fontWeight: "600", color: "#09090B" }}>
-                {isRegister ? "Masuk" : "Daftar"}
-              </Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#FAFAFA" }}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FAFAFA" />
-
-      {/* Header Home */}
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <View
         style={{
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          paddingHorizontal: 20,
-          paddingVertical: 16,
-          borderBottomWidth: 1,
-          borderBottomColor: "#E4E4E7",
-          backgroundColor: "#FFFFFF",
+          backgroundColor: colors.primary,
+          paddingTop: 60,
+          paddingHorizontal: SPACING.lg,
+          paddingBottom: 30,
+          borderBottomLeftRadius: 40,
+          borderBottomRightRadius: 40,
+          position: "relative",
+          overflow: "hidden",
         }}
       >
-        <View>
-          <Text
+        <View style={{ position: "relative", zIndex: 2 }}>
+          <View
             style={{
-              fontSize: 20,
-              fontWeight: "600",
-              color: "#09090B",
-              letterSpacing: -0.3,
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 8,
             }}
           >
-            Catatan
+            <Text
+              style={{
+                color: colors.textSecondary,
+                fontSize: 14,
+                fontWeight: "600",
+              }}
+            >
+              {greeting}
+            </Text>
+
+            <IconButton
+              icon="cog-outline"
+              size={22}
+              iconColor={colors.textPrimary}
+              style={{
+                backgroundColor: "rgba(255, 255, 255, 0.15)",
+                margin: 0,
+              }}
+              onPress={handleOpenSettings}
+            />
+          </View>
+
+          <Text
+            variant="headlineMedium"
+            style={{
+              color: colors.textPrimary,
+              fontWeight: "bold",
+              marginBottom: 4,
+            }}
+          >
+            Catatan Saya
           </Text>
-          <Text style={{ fontSize: 12, color: "#71717A", marginTop: 2 }}>
-            {notes.length} total catatan
+
+          <Text
+            style={{
+              color: colors.textSecondary,
+              fontSize: 15,
+              marginBottom: 20,
+            }}
+          >
+            Tulis & kelola catatanmu dengan mudah
           </Text>
+
+          <Searchbar
+            placeholder="Cari catatan..."
+            value={search}
+            onChangeText={setSearch}
+            style={{
+              borderRadius: 25,
+              backgroundColor: colors.card,
+            }}
+            inputStyle={{ color: colors.textPrimary }}
+            iconColor={colors.primary}
+            placeholderTextColor={colors.textSecondary}
+          />
         </View>
-        <TouchableOpacity
+
+        <View
           style={{
-            paddingVertical: 6,
-            paddingHorizontal: 12,
-            backgroundColor: "#FFFFFF",
-            borderWidth: 1,
-            borderColor: "#E4E4E7",
-            borderRadius: 6,
+            position: "absolute",
+            width: 200,
+            height: 200,
+            borderRadius: 100,
+            backgroundColor: "rgba(255, 255, 255, 0.1)",
+            top: -50,
+            right: -50,
           }}
-          onPress={logout}
-        >
-          <Text style={{ color: "#EF4444", fontSize: 12, fontWeight: "500" }}>
-            Keluar
-          </Text>
-        </TouchableOpacity>
+        />
       </View>
 
       {/* List Catatan */}
-      {notesLoading ? (
-        <View
-          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
-        >
-          <ActivityIndicator size="small" color="#09090B" />
-        </View>
-      ) : (
+      <View style={{ flex: 1, paddingTop: 16 }}>
         <FlatList
-          data={notes}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={{ padding: 16 }}
+          data={filteredNotes}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          refreshing={loading}
+          onRefresh={fetchNotes}
+          contentContainerStyle={{
+            paddingHorizontal: SPACING.lg,
+            paddingBottom: 100,
+          }}
+          ListEmptyComponent={
+            !loading ? (
+              <View
+                style={{
+                  alignItems: "center",
+                  justifyContent: "center",
+                  paddingVertical: 50,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontWeight: "bold",
+                    color: colors.primary,
+                    marginBottom: 8,
+                  }}
+                >
+                  Belum ada catatan
+                </Text>
+                <Text style={{ fontSize: 14, color: colors.textSecondary }}>
+                  Tekan tombol + untuk membuat catatan baru
+                </Text>
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => (
-            <TouchableOpacity
+            <Card
+              onPress={() => router.push(`/list/id=${item.id}` as any)}
               style={{
-                backgroundColor: "#FFFFFF",
-                borderRadius: 8,
-                padding: 16,
-                marginBottom: 10,
-                borderWidth: 1,
-                borderColor: "#E4E4E7",
+                marginBottom: 14,
+                borderRadius: 20,
+                backgroundColor: colors.card,
+                elevation: 2,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.05,
+                shadowRadius: 8,
               }}
-              onPress={() => handleOpenEditModal(item)}
             >
-              <Text
-                style={{
-                  fontSize: 15,
-                  fontWeight: "600",
-                  color: "#09090B",
-                  marginBottom: 4,
-                }}
-                numberOfLines={1}
-              >
-                {item.title}
-              </Text>
-              <Text
-                style={{
-                  fontSize: 13,
-                  color: "#71717A",
-                  marginBottom: 8,
-                  lineHeight: 18,
-                }}
-                numberOfLines={2}
-              >
-                {item.content}
-              </Text>
-              <Text style={{ fontSize: 11, color: "#A1A1AA" }}>
-                {new Date(item.created_at).toLocaleDateString()}
-              </Text>
-            </TouchableOpacity>
+              <Card.Content style={{ padding: 16 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    marginBottom: 4,
+                  }}
+                >
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text
+                      style={{
+                        fontSize: 18,
+                        fontWeight: "bold",
+                        color: colors.textPrimary,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {item.title}
+                    </Text>
+                  </View>
+
+                  <View style={{ flexDirection: "row", gap: 4 }}>
+                    <IconButton
+                      icon="pencil"
+                      size={18}
+                      containerColor={colors.border}
+                      iconColor={colors.primary}
+                      onPress={() =>
+                        router.push(`/AddNotes?id=${item.id}` as any)
+                      }
+                    />
+                    <IconButton
+                      icon="delete"
+                      size={18}
+                      containerColor="#FFE5E5"
+                      iconColor="#FF6B6B"
+                      onPress={() =>
+                        Alert.alert("Hapus Catatan", `Hapus "${item.title}"?`, [
+                          { text: "Batal", style: "cancel" },
+                          {
+                            text: "Hapus",
+                            onPress: () => handleDelete(item.id),
+                            style: "destructive",
+                          },
+                        ])
+                      }
+                    />
+                  </View>
+                </View>
+
+                <Text
+                  style={{
+                    color: colors.textSecondary,
+                    fontSize: 13,
+                    lineHeight: 18,
+                    marginTop: 4,
+                  }}
+                  numberOfLines={2}
+                >
+                  {item.content}
+                </Text>
+              </Card.Content>
+            </Card>
           )}
         />
-      )}
+      </View>
 
-      {/* Floating Action Button (+) */}
-      <TouchableOpacity
+      {/* Floating Action Button */}
+      <FAB
+        icon="plus"
         style={{
           position: "absolute",
-          bottom: 24,
           right: 24,
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          backgroundColor: "#09090B",
-          justifyContent: "center",
-          alignItems: "center",
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
-          elevation: 3,
+          bottom: 30,
+          backgroundColor: colors.secondary,
+          borderRadius: 100,
         }}
-        onPress={handleOpenCreateModal}
-      >
-        <Text style={{ color: "#FAFAFA", fontSize: 28, marginTop: -2 }}>+</Text>
-      </TouchableOpacity>
-
-      {/* Komponen Modal Create & Edit yang Dipisah */}
-      <NoteModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        isEditing={selectedNote !== null}
-        title={noteTitle}
-        setTitle={setNoteTitle}
-        content={noteContent}
-        setContent={setNoteContent}
-        onSave={handleSaveNote}
-        onDelete={async () => {
-          await deleteNote(selectedNote.id);
-          setModalVisible(false);
-        }}
+        color="#1E293B"
+        onPress={() => router.push(`/AddNotes` as any)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
